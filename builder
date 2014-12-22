@@ -28,6 +28,7 @@ usage()
 	echo 1>&2 " -c path to conf"
 	echo 1>&2 " -r path Path to repo"
 	echo 1>&2 " -p prefix path for extracted deb (e.g: -p /usr/local)"
+	echo 1>&2 " -d trace command for debug"
 	echo 1>&2 ""
 	exit 1
 }
@@ -68,12 +69,12 @@ set_flatsize()
 ### MAIN ###
 unset conf repo
 
-while getopts "c:r:p:" opt; do
+while getopts "c:r:p:d" opt; do
 	case "$opt" in
 		c) conf="$OPTARG" ;;
 		r) repo="$OPTARG" ;;
 		p) newroot="${OPTARG}" ;;
-		d) set -x ;;
+		d) set -o xtrace ;;
 		*) usage ;;
 	esac
 	shift $(($OPTIND - 1))
@@ -82,6 +83,7 @@ done
 [ -z "${conf}" -o -z "${repo}" ] && usage
 
 pkgdir="$( dirname $0 )" # XXX
+pkgdir="$( realpath $pkgdir )" # curdir
 
 if [ ! -d "$repo" ]; then
 	err 1 "Please create $repo dir"
@@ -107,18 +109,35 @@ Description=
 # overlap per-project params
 . $conf
 
-_fakeroot="$fakeroot"
 [ -n "${newroot}" ] && root="${newroot}"
+_fakeroot="${fakeroot}${root}/"
 
-find_files="find ${_fakeroot}${root}${SRCDIR} -type f"
-find_dirs="find ${_fakeroot}${root}${SRCDIR} -type d"
-find_size="find ${_fakeroot}${root}${SRCDIR} -type f -exec stat -c %s {} \+"
+[ -z "${SRC_DIR}" -o ! -d "${SRC_DIR}" ] && err 1 "No such source: $SRC_DIR"
+#SRC_DIRNAME=$( dirname ${SRC_DIR} )
+SRC_DIRNAME=$( basename ${SRC_DIR} )
+mkdir -p "${_fakeroot}/${SRC_DIRNAME}"
+cp -a ${SRC_DIR}/* ${_fakeroot}/${SRC_DIRNAME}/
 
-[ -z "${SRCDIR}" -o ! -d "${SRCDIR}" ] && err 1 "No such source: $SRCDIR"
-SRC_DIRNAME=$( dirname ${SRCDIR} )
-[ -n "${root}" ] && SRC_DIRNAME="${root}/${SRC_DIRNAME}"
-mkdir -p "${fakeroot}/${SRC_DIRNAME}"
-cp -a ${SRCDIR} ${fakeroot}/${SRC_DIRNAME}
+#find_files="find ${_fakeroot}${SRC_DIRNAME} -type f"
+#find_dirs="find ${_fakeroot}${SRC_DIRNAME} -type d"
+#find_size="find ${_fakeroot}${SRC_DIRNAME} -type f -exec stat -c %s {} \+"
+
+#ex=""
+#for i in ${EXCLUDE}; do
+#		ex="${ex} -not -path \'${_fakeroot}${SRC_DIRNAME}${i}\'"
+#done
+
+#######################
+# temporary work-around with rm -rf
+for i in ${EXCLUDE}; do
+	echo "Exclude location: rm -rf ${_fakeroot}${SRC_DIRNAME}${i}"
+	rm -rf ${_fakeroot}${SRC_DIRNAME}${i}
+done
+
+find_files="find ${_fakeroot}${SRC_DIRNAME} -type f"
+find_dirs="find ${_fakeroot}${SRC_DIRNAME} -type d"
+find_size="find ${_fakeroot}${SRC_DIRNAME} -type f -exec stat -c %s {} \+"
+#######################
 
 files=
 dirs=
@@ -127,8 +146,8 @@ set_files
 #set_dirs
 set_flatsize
 
-if [ -f "${SRCDIR}/.git/config" ]; then
-	cd ${SRCDIR}
+if [ -f "${SRC_DIR}/.git/config" ]; then
+	cd ${SRC_DIR}
 	[ Version=$( git log -n1 |/usr/bin/awk '/commit /{print $2}' |head -c 8 )
 fi
 
@@ -149,7 +168,21 @@ EOF
 echo "${files}" > ${DIR}/md5sums
 
 cd ${DIR}
-tar zcvf control.tar.gz control md5sums
+CONTROL_FILES="control md5sums"
+
+if [ -n "${control}" ]; then
+	for i in $( find ${pkgdir}/control/${control} -type f -exec basename {} \;); do
+		if [ -f "${pkgdir}/control/${control}/${i}" ]; then
+				cp ${pkgdir}/control/${control}/${i} ${DIR}
+				CONTROL_FILES="${CONTROL_FILES} ${i}"
+		fi
+	done
+
+fi
+
+#tar zcvf control.tar.gz control md5sums
+tar zcvf control.tar.gz ${CONTROL_FILES}
+
 rm -f control md5sums
 
 cd ${fakeroot}

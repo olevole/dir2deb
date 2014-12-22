@@ -1,0 +1,11 @@
+#!/bin/sh
+
+set -e
+
+. /usr/share/debconf/confmodule
+db_version 2.0
+
+#todo: chown and chmod - how to retreive file list?
+#/bin/date > /tmp/lol.txt
+
+exit 0
