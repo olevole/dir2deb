@@ -130,8 +130,13 @@ if [ $chroot -ne 1 ]; then
 else
 	unset SRC_DIRNAME
 fi
-mkdir -p "${_fakeroot}/${SRC_DIRNAME}"
-cp -a ${SRC_DIR}/* ${_fakeroot}/${SRC_DIRNAME}/
+
+BASE_DIR="${_fakeroot}/${SRC_DIRNAME}"
+mkdir -p "${BASE_DIR}"
+#cp -a ${SRC_DIR}/* ${_fakeroot}/${SRC_DIRNAME}/
+
+#cd "${SRC_DIR}" && find ${SRC_DIR} \( -type f -or -type d -or -type l \) -and -not -regex \"$JAILNODATA\" -print |sed s:${BASE_DIR}:./:g |cpio -pdmu ${1}
+cd "${SRC_DIR}" && find ${SRC_DIR} \( -type f -or -type d -or -type l \) |sed s:${SRC_DIR}:./:g |cpio -pdmu ${BASE_DIR}
 
 #find_files="find ${_fakeroot}${SRC_DIRNAME} -type f"
 #find_dirs="find ${_fakeroot}${SRC_DIRNAME} -type d"
