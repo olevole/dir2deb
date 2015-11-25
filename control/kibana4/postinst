@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "configure" ]; then
+	addgroup --system --quiet kibana
+	adduser --system --quiet --ingroup kibana --no-create-home kibana
+	chown -R kibana:kibana /opt/kibana4
+fi
+

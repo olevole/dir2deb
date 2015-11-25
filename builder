@@ -26,9 +26,12 @@ usage()
 	echo 1>&2 ""
 	echo 1>&2 " Options:"
 	echo 1>&2 " -c path to conf"
+	echo 1>&2 " -j jailed/chroot environment. To create hier from /, do not inlcude folder name in prefix path"
 	echo 1>&2 " -r path Path to repo"
 	echo 1>&2 " -p prefix path for extracted deb (e.g: -p /usr/local)"
 	echo 1>&2 " -d trace command for debug"
+	echo 1>&2 " -s path to SRC_DIR "
+	echo 1>&2 " -v overwrite version "
 	echo 1>&2 ""
 	exit 1
 }
@@ -67,14 +70,19 @@ set_flatsize()
 
 
 ### MAIN ###
-unset conf repo
+unset conf repo chroot
 
-while getopts "c:r:p:d" opt; do
+chroot=0
+
+while getopts "dc:r:p:s:v:j:" opt; do
 	case "$opt" in
 		c) conf="$OPTARG" ;;
+		j) chroot="$OPTARG" ;;
 		r) repo="$OPTARG" ;;
 		p) newroot="${OPTARG}" ;;
 		d) set -o xtrace ;;
+		s) sourcedir="${OPTARG}" ;;
+		v) version="${OPTARG}" ;;
 		*) usage ;;
 	esac
 	shift $(($OPTIND - 1))
@@ -91,7 +99,7 @@ fi
 
 set -e
 pre
-trap "post" HUP INT ABRT BUS TERM EXIT
+#trap "post" HUP INT ABRT BUS TERM EXIT
 
 # init empty variable for manifest
 Package=
@@ -110,11 +118,18 @@ Description=
 . $conf
 
 [ -n "${newroot}" ] && root="${newroot}"
+[ -n "${sourcedir}" ] && SRC_DIR="${sourcedir}"
+[ -n "${version}" ] && Version="${version}"
+
 _fakeroot="${fakeroot}${root}/"
 
 [ -z "${SRC_DIR}" -o ! -d "${SRC_DIR}" ] && err 1 "No such source: $SRC_DIR"
-#SRC_DIRNAME=$( dirname ${SRC_DIR} )
-SRC_DIRNAME=$( basename ${SRC_DIR} )
+
+if [ $chroot -ne 1 ]; then
+	SRC_DIRNAME=$( basename ${SRC_DIR} )
+else
+	unset SRC_DIRNAME
+fi
 mkdir -p "${_fakeroot}/${SRC_DIRNAME}"
 cp -a ${SRC_DIR}/* ${_fakeroot}/${SRC_DIRNAME}/
 
@@ -155,6 +170,7 @@ fi
 
 cat > ${DIR}/control <<EOF
 Package: ${Package}
+Source: ${Package}
 Version: ${Version}
 Architecture: ${Architecture}
 Maintainer: ${Maintainer}
@@ -162,7 +178,9 @@ Installed-Size: ${flatsize}
 Depends: ${Depends}
 Section: ${Section}
 Priority: ${Priority}
+Homepage: http://www.olevole.ru/
 Description: ${Description}
+
 EOF
 
 echo "${files}" > ${DIR}/md5sums
@@ -192,6 +210,8 @@ rm -rf ${fakeroot}
 
 echo "2.0" > ${DIR}/debian-binary
 cd ${DIR}
+
+#exit 0
 ar rcv ${Package}-${Version}.deb debian-binary control.tar.gz data.tar.gz
 
 mv ${Package}-${Version}.deb ${repo}/
